@@ -47,7 +47,7 @@ class Apriori(object):
         return frequent
 
     def _calculate_support(self, itemset):
-        # 判断项集是否在交易中，并计算支持度
+        # 判断项集是否在事务中，并计算支持度
         count = 0
         for transaction in self.transactions:
             if not [False for item in itemset if item not in transaction]:
@@ -81,7 +81,7 @@ class Apriori(object):
         frequent_itemsets = self.find_frequent_itemsets(transactions)
         for itemset in frequent_itemsets[1:]:  # 忽略第一层
             for item in itemset:
-                # 对每个频繁项
+                # 对每个频繁项，其子集一定在频繁项集里
                 for k in range(1, len(item)):
                     for subset in itertools.combinations(item, k):
                         confidence = self.frequent_supports[tuple(item)] / self.frequent_supports[subset]
@@ -92,18 +92,17 @@ class Apriori(object):
 if __name__ == '__main__':
     transactions = [[1, 2, 3, 4], [1, 2, 4], [1, 2], [2, 3, 4], [2, 3], [3, 4], [2, 4]]
     apriori = Apriori(0.25, 0.8)
-    # Get and print the rules
     print('Rules:')
     apriori.generate_rules(transactions)
     print('Frequent Itemsets:')
     pprint(apriori.frequent_sets)
 
-    # time_start = time.time()
-    # lines = []
-    # with open('test.txt', 'rt') as f:
-    #     for line in f:
-    #         lines.append(line.strip().split(','))
-    # apriori = Apriori(0.06, 0.75)
-    # apriori.generate_rules(lines)
-    # time_end = time.time()
-    # print('time cost', time_end - time_start)
+    time_start = time.time()
+    lines = []
+    with open('test.txt', 'rt') as f:
+        for line in f:
+            lines.append(line.strip().split(','))
+    apriori = Apriori(0.06, 0.75)
+    apriori.generate_rules(lines)
+    time_end = time.time()
+    print('time cost', time_end - time_start)
