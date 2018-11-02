@@ -40,7 +40,7 @@ class BiLSTM_CRF(nn.Module):
         embeds = self.word_embeds(sent).view(len(sent), 1, -1)
         lstm_out, self.hidden = self.lstm(embeds, self.hidden)
         lstm_out = lstm_out.view(len(sent), self.hidden_dim)
-        lstm_feats = self.hidden2tag(lstm_out)
+        lstm_feats = F.softmax(self.hidden2tag(lstm_out), 1)
         return lstm_feats
 
     def _real_path_score(self, feats, tags):
@@ -128,7 +128,7 @@ def main():
         print('before training:\n', model(precheck_sent))
         print('real target:\n', precheck_tags)
 
-    for _ in range(100):
+    for _ in range(50):
         for sentence, tags in train_data:
             model.zero_grad()
             sentence_in = prepare_sequence(sentence, word2ix)
