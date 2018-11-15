@@ -18,13 +18,12 @@ def prepare_sequence(seq, word2ix):
 
 class BiLSTM_CRF(nn.Module):
 
-    def __init__(self, vocab_size, tag_to_ix, embedding_dim, hidden_dim):
+    def __init__(self, vocab_size, tagset_size, embedding_dim, hidden_dim):
         super(BiLSTM_CRF, self).__init__()
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
         self.vocab_size = vocab_size
-        self.tag_to_ix = tag_to_ix
-        self.tagset_size = len(tag_to_ix)
+        self.tagset_size = tagset_size
         self.word_embeds = nn.Embedding(vocab_size, embedding_dim)
         self.lstm = nn.LSTM(embedding_dim, hidden_dim // 2, num_layers=1, bidirectional=True)
         self.hidden2tag = nn.Linear(hidden_dim, self.tagset_size)
@@ -112,29 +111,29 @@ def main():
         "B I O O B I O B I I I O B".split()
     )]
 
-    tag_to_ix = {"B": 0, "I": 1, "O": 2}
+    tag2ix = {"B": 0, "I": 1, "O": 2}
     word2ix = {}
     for sentence, tags in train_data:
         for word in sentence:
             if word not in word2ix:
                 word2ix[word] = len(word2ix)
 
-    model = BiLSTM_CRF(len(word2ix), tag_to_ix, EMBEDDING_DIM, HIDDEN_DIM)
-    optimizer = torch.optim.RMSprop(model.parameters(), lr=0.001, weight_decay=1e-4)
+    model = BiLSTM_CRF(len(word2ix), len(tag2ix), EMBEDDING_DIM, HIDDEN_DIM)
+    optimizer = torch.optim.RMSprop(model.parameters(), lr=0.01, weight_decay=1e-4)
 
     with torch.no_grad():
         precheck_sent = prepare_sequence(test_data[0][0], word2ix)
-        precheck_tags = [tag_to_ix[t] for t in test_data[0][1]]
+        precheck_tags = [tag2ix[t] for t in test_data[0][1]]
         print('before training:\n', model(precheck_sent))
         print('real target:\n', precheck_tags)
 
-    for _ in range(50):
+    for _ in range(5):
         for sentence, tags in train_data:
             model.zero_grad()
             sentence_in = prepare_sequence(sentence, word2ix)
-            targets = torch.LongTensor([tag_to_ix[t] for t in tags])
+            targets = torch.LongTensor([tag2ix[t] for t in tags])
             loss = model.neg_log_loss(sentence_in, targets)
-            # print(loss.item())
+            print(loss.item())
             loss.backward()
             optimizer.step()
 
