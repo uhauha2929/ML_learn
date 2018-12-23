@@ -89,7 +89,7 @@ class BiLSTM_CRF(nn.Module):
             cur_tag = pre_tag
         return path
 
-    def cut(self, sent):
+    def forward(self, sent):
         with torch.no_grad():
             lstm_feats = self._get_lstm_features(sent)
             tag_seq = self._decode(lstm_feats)
@@ -126,7 +126,7 @@ def main():
 
     precheck_sent = prepare_sequence(test_data[0][0], word2ix)
     precheck_tags = prepare_tags(test_data[0][1], tag2ix)
-    print('before training:\n', model.cut(precheck_sent))
+    print('before training:\n', model(precheck_sent))
     print('real target:\n', precheck_tags.tolist())
 
     for _ in range(5):
@@ -141,7 +141,7 @@ def main():
             optimizer.step()
 
     precheck_sent = prepare_sequence(test_data[0][0], word2ix)
-    print('after training:\n', model.cut(precheck_sent))
+    print('after training:\n', model(precheck_sent))
 
 
 if __name__ == '__main__':
