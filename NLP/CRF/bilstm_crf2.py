@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torchcrf import CRF
+from tqdm import tqdm
 
 TRAIN_DATA = '/home/yzhao/data/icwb2-data/training/pku_training.utf8'
 
@@ -92,7 +93,7 @@ class BLSTM_CRF(nn.Module):
             packed = pack_padded_sequence(x, lengths)
             x, _ = self.lstm(packed)
             x, _ = pad_packed_sequence(x)
-        x = self.fc(x)  # [L, B, T]
+        x = F.selu(self.fc(x))  # [L, B, T]
         return x
 
     def get_loss(self, x, y, mask=None):
@@ -123,19 +124,21 @@ def main():
     counter = Counter(''.join(trains))
     char2id = {c: i for i, (c, _) in enumerate(counter.most_common(None), 1)}  # 0 for pad(mask)
     tag2id = {'s': 0, 'b': 1, 'm': 2, 'e': 3}
-    model = BLSTM_CRF(len(char2id), len(tag2id), 100, 128).to(DEVICE)
+    model = BLSTM_CRF(len(char2id), len(tag2id), 50, 128).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    for X, Y, mask in data_generator(trains, 32, char2id, tag2id):
-        model.zero_grad()
-        loss = model.get_loss(X, Y, mask)
-        print(loss.item())
-        loss.backward()
-        optimizer.step()
 
-    text = '中共中央总书记、国家主席、中央军委主席江泽民发表新年贺词。'
-    seg = cut(text, model, char2id, tag2id)
-    print(seg)
-    # 中共中央 总书记 、 国家 主席 、 中央军委 主席 江 泽民 发表 新年 贺词 。
+    for _ in range(2):
+        bar = tqdm(trains)
+        for X, Y, mask in data_generator(bar, 32, char2id, tag2id):
+            model.zero_grad()
+            loss = model.get_loss(X, Y, mask)
+            bar.set_description('loss:{:.4f}'.format(loss.item()))
+            loss.backward()
+            optimizer.step()
+
+        text = '忠于祖国，忠于中国共产党，有坚定的革命理想、信念，全心全意为人民服务，自觉献身国防事业。'
+        seg = cut(text, model, char2id, tag2id)
+        print(seg)
 
 
 if __name__ == '__main__':
