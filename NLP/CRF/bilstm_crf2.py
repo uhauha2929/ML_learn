@@ -2,9 +2,10 @@
 # @Time    : 2018/12/23 16:47
 # @Author  : uhauha2929
 import itertools
+import os
+import re
 from collections import Counter
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -13,8 +14,10 @@ from torchcrf import CRF
 from tqdm import tqdm
 
 TRAIN_DATA = '/home/yzhao/data/icwb2-data/training/pku_training.utf8'
+TEST_DATA = '/home/yzhao/data/icwb2-data/testing/pku_test.utf8'
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
 
 def text2seq(text, char2id):
@@ -58,16 +61,15 @@ def data_generator(raw_data, batch_size, char2id, tag2id):
     X, Y = [], []
     for i, s in enumerate(raw_data, 1):
         x = text2seq(s, char2id)
-        y = text2tag(s, tag2id)
         if len(x) > 0:
             X.append(x)
-            Y.append(y)
+            Y.append(text2tag(s, tag2id))
         if len(X) == batch_size or i == len(raw_data):
             X.sort(key=lambda x: len(x), reverse=True)
-            Y.sort(key=lambda x: len(x), reverse=True)
             X = padding(X)
-            Y = padding(Y)
             mask = binary_matrix(X)
+            Y.sort(key=lambda x: len(x), reverse=True)
+            Y = padding(Y)
             yield torch.tensor(X, dtype=torch.long).to(DEVICE), \
                   torch.tensor(Y, dtype=torch.long).to(DEVICE), \
                   torch.tensor(mask, dtype=torch.uint8).to(DEVICE)
@@ -107,7 +109,7 @@ class BLSTM_CRF(nn.Module):
         return x
 
 
-def cut(text, model, char2id, tag2id):
+def single_cut(text, model, char2id, tag2id):
     seq = text2seq(text, char2id)
     x = torch.tensor(seq, dtype=torch.long).view(-1, 1).to(DEVICE)
     tags = model.decode(x)[0]
@@ -119,15 +121,8 @@ def cut(text, model, char2id, tag2id):
     return ''.join(result)
 
 
-def main():
-    trains = open(TRAIN_DATA, 'rt', encoding='utf-8').readlines()
-    counter = Counter(''.join(trains))
-    char2id = {c: i for i, (c, _) in enumerate(counter.most_common(None), 1)}  # 0 for pad(mask)
-    tag2id = {'s': 0, 'b': 1, 'm': 2, 'e': 3}
-    model = BLSTM_CRF(len(char2id), len(tag2id), 50, 128).to(DEVICE)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-
-    for _ in range(2):
+def train(model, optimizer, trains, char2id, tag2id):
+    for _ in range(10):
         bar = tqdm(trains)
         for X, Y, mask in data_generator(bar, 32, char2id, tag2id):
             model.zero_grad()
@@ -137,8 +132,45 @@ def main():
             optimizer.step()
 
         text = '忠于祖国，忠于中国共产党，有坚定的革命理想、信念，全心全意为人民服务，自觉献身国防事业。'
-        seg = cut(text, model, char2id, tag2id)
+        seg = single_cut(text, model, char2id, tag2id)
         print(seg)
+
+
+# def cut_sent(para):
+#     para = re.sub('([。！？\?])([^”’])', r"\1\n\2", para)  # 单字符断句符
+#     para = re.sub('(\.{6})([^”’])', r"\1\n\2", para)  # 英文省略号
+#     para = re.sub('(\…{2})([^”’])', r"\1\n\2", para)  # 中文省略号
+#     para = re.sub('([。！？\?][”’])([^，。！？\?])', r'\1\n\2', para)
+#     para = para.rstrip()
+#     return para.split("\n")
+
+
+def generate_test_file(model, tests, char2id, tag2id):
+    output = open('test_segmentation.utf8', 'at', encoding='utf-8')
+    for line in tqdm(tests):
+        line = line.strip()
+        if len(line) > 0:
+            res = single_cut(line, model, char2id, tag2id)
+            output.write(res + '\n')
+    output.close()
+
+
+def main():
+    trains = open(TRAIN_DATA, 'rt', encoding='utf-8').readlines()
+    counter = Counter(''.join(trains))
+    char2id = {c: i for i, (c, _) in enumerate(counter.most_common(None), 1)}  # 0 for pad(mask)
+    tag2id = {'s': 0, 'b': 1, 'm': 2, 'e': 3}
+    model = BLSTM_CRF(len(char2id), len(tag2id), 128, 128).to(DEVICE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+    if os.path.exists('pku.pt'):
+        model.load_state_dict(torch.load('pku.pt'))
+    else:
+        train(model, optimizer, trains, char2id, tag2id)
+        torch.save(model.state_dict(), 'pku.pt')
+
+    tests = open(TEST_DATA, 'rt', encoding='utf-8').readlines()
+    generate_test_file(model, tests, char2id, tag2id)
 
 
 if __name__ == '__main__':
